@@ -1,0 +1,24 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and generated archives
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+code.zip
+*.tmp
+*.out
+*.err
+.runtime/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo

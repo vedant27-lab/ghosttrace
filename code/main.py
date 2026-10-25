@@ -9,16 +9,24 @@ root-level output.csv is written with the challenge's exact schema.
 from __future__ import annotations
 
 import csv
+import argparse
 import json
 import re
 import sys
+import time
 import unicodedata
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from evidence_loader import load_all_evidence
-from identity_resolver import IdentityResolver, parse_timestamp
-from state_reconstructor import StateObservation, reconstruct_case_observations
+try:
+    from .evidence_loader import load_all_evidence
+    from .identity_resolver import IdentityResolver, parse_timestamp
+    from .state_reconstructor import StateObservation, reconstruct_case_observations
+except ImportError:  # Supports the documented `python code/main.py` entry point.
+    from evidence_loader import load_all_evidence
+    from identity_resolver import IdentityResolver, parse_timestamp
+    from state_reconstructor import StateObservation, reconstruct_case_observations
 
 ROOT = Path(__file__).resolve().parent.parent
 DATASET = ROOT / "dataset"
@@ -267,7 +275,12 @@ def _build_steps(observations: list[StateObservation], status: str, user_id: str
     return _sort_steps(findings + remediations + verifications, status)
 
 
-def process_request(request: dict[str, str], resolver: IdentityResolver, documents) -> dict[str, str]:
+def process_request(
+    request: dict[str, str],
+    resolver: IdentityResolver,
+    documents,
+    dataset_dir: Path = DATASET,
+) -> dict[str, str]:
     case_id = request["case_id"]
     if not is_deletion_request(request):
         return {"case_id": case_id, "deletion_status": "NOT_APPLICABLE", "steps_json": "[]"}
@@ -280,7 +293,7 @@ def process_request(request: dict[str, str], resolver: IdentityResolver, documen
         return {"case_id": case_id, "deletion_status": "INCOMPLETE", "steps_json": json.dumps(ordered, separators=(",", ":"), ensure_ascii=False)}
 
     identity = matches[0]
-    observations = reconstruct_case_observations(DATASET, request, identity, documents=documents)
+    observations = reconstruct_case_observations(dataset_dir, request, identity, documents=documents)
     observations = _collapse_observations(observations)
     actions = [_action_for(obs) for obs in observations]
     has_violation = any(actions)
@@ -310,35 +323,48 @@ def process_request(request: dict[str, str], resolver: IdentityResolver, documen
     }
 
 
-def main() -> int:
-    requests_path = DATASET / "deletion_requests.csv"
+class AuditCancelled(RuntimeError):
+    """Raised when a caller requests cancellation between case evaluations."""
+
+
+def generate_output(
+    dataset_dir: str | Path = DATASET,
+    output_path: str | Path = OUTPUT_PATH,
+    progress_callback: Callable[[int, int], bool] | None = None,
+) -> dict[str, Any]:
+    """Run the deterministic audit engine and write the contract CSV.
+
+    The callback receives ``(completed_cases, total_cases)``. Returning False
+    cancels before the output file is replaced, which keeps the last good
+    result available to API consumers.
+    """
+    started = time.perf_counter()
+    dataset_dir = Path(dataset_dir).resolve()
+    output_path = Path(output_path).resolve()
+    requests_path = dataset_dir / "deletion_requests.csv"
     if not requests_path.is_file():
-        print(f"ERROR: requests file not found: {requests_path}", file=sys.stderr)
-        return 2
+        raise FileNotFoundError(f"requests file not found: {requests_path}")
     requests = read_csv(requests_path)
     if not requests:
-        print("ERROR: deletion_requests.csv is empty.", file=sys.stderr)
-        return 2
+        raise ValueError("deletion_requests.csv is empty")
     required = {"case_id", "email", "audit_at", "request_text"}
     missing = required - set(requests[0])
     if missing:
-        print(f"ERROR: missing required request columns: {sorted(missing)}", file=sys.stderr)
-        return 2
+        raise ValueError(f"missing required request columns: {sorted(missing)}")
     case_ids = [r.get("case_id", "") for r in requests]
     if any(not x for x in case_ids) or len(case_ids) != len(set(case_ids)):
-        print("ERROR: blank or duplicate case IDs in requests.", file=sys.stderr)
-        return 2
+        raise ValueError("blank or duplicate case IDs in requests")
 
     print("Loading evidence (PDF/OCR/JSON/SQL/log/text) once...")
-    documents = load_all_evidence(DATASET)
+    documents = load_all_evidence(dataset_dir)
     extraction_errors = sum(bool(d.extraction_error) for d in documents)
     print(f"Evidence documents loaded: {len(documents)}; extraction errors: {extraction_errors}")
-    resolver = IdentityResolver.from_dataset(DATASET)
+    resolver = IdentityResolver.from_dataset(dataset_dir)
     rows = []
     failures = []
     for i, request in enumerate(requests, 1):
         try:
-            rows.append(process_request(request, resolver, documents))
+            rows.append(process_request(request, resolver, documents, dataset_dir))
         except Exception as exc:
             failures.append((request.get("case_id", "?"), f"{type(exc).__name__}: {exc}"))
             # A deterministic fail-closed result remains valid JSON and keeps the row.
@@ -347,22 +373,61 @@ def main() -> int:
             fallback = _sort_steps(fallback, "INCOMPLETE")
             rows.append({"case_id": request.get("case_id", ""), "deletion_status": "INCOMPLETE",
                          "steps_json": json.dumps(fallback, separators=(",", ":"), ensure_ascii=False)})
+        if progress_callback is not None and not progress_callback(i, len(requests)):
+            raise AuditCancelled("Audit cancelled by caller")
         if i % 50 == 0 or i == len(requests):
             print(f"Processed {i}/{len(requests)} requests.")
 
     rows.sort(key=lambda row: row["case_id"])
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT_PATH.open("w", encoding="utf-8", newline="") as handle:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
 
     counts = {s: sum(row["deletion_status"] == s for row in rows) for s in ("COMPLETE", "INCOMPLETE", "NOT_APPLICABLE")}
-    print(f"\nOutput written: {OUTPUT_PATH}")
+    print(f"\nOutput written: {output_path}")
     print(f"Rows: {len(rows)}; status counts: {counts}; runtime exceptions: {len(failures)}")
     if failures:
         for case_id, message in failures[:20]:
             print(f"ERROR {case_id}: {message}", file=sys.stderr)
+    return {
+        "rows": len(rows),
+        "status_counts": counts,
+        "runtime_seconds": round(time.perf_counter() - started, 3),
+        "runtime_exceptions": len(failures),
+        "output_path": str(output_path),
+        "evidence_documents": len(documents),
+        "evidence_extraction_errors": extraction_errors,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate a deterministic GhostTrace deletion-audit output."
+    )
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        default=DATASET,
+        help="Participant-facing dataset directory (default: repository dataset/).",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=OUTPUT_PATH,
+        help="Output CSV path (default: repository output.csv).",
+    )
+    args = parser.parse_args()
+    try:
+        result = generate_output(args.dataset, args.output)
+    except AuditCancelled as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 130
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    if result["runtime_exceptions"]:
         return 1
     return 0
 

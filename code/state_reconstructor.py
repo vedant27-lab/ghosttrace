@@ -14,8 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from evidence_loader import EvidenceDocument, load_all_evidence
-from identity_resolver import IdentityMatch, normalize_value, parse_timestamp
+try:
+    from .evidence_loader import EvidenceDocument, load_all_evidence
+    from .identity_resolver import IdentityMatch, normalize_value, parse_timestamp
+except ImportError:  # Supports direct execution from the code directory.
+    from evidence_loader import EvidenceDocument, load_all_evidence
+    from identity_resolver import IdentityMatch, normalize_value, parse_timestamp
 
 SYSTEM_ALIASES = {
     "account_service": "account_service",
@@ -238,6 +242,16 @@ def _category(system: str, path: str, record: dict[str, Any]) -> str:
     if system == "object_storage" or "attachment" in collection:
         return "SUPPORT_ATTACHMENT"
     if system == "support_platform":
+        # A support export can contain both a shared conversation and an
+        # uploaded document.  The explicit attachment marker is stronger than
+        # the word "attachment" in the OCR text: attachment metadata must be
+        # deleted, while shared conversation text is retained and redacted.
+        resource_type = str(record.get("resource_type", "")).casefold()
+        attachment_marker = record.get("attachment") is True or resource_type in {
+            "attachment", "support_attachment", "document"
+        }
+        if attachment_marker:
+            return "SUPPORT_ATTACHMENT"
         # Keep shared conversation context but delete bare contact/attachment copies.
         return "SUPPORT_MESSAGE" if (
             "message_pii_scan" in rec_text
@@ -583,8 +597,15 @@ def _text_observations(doc, case_id, cutoff, ids):
                     out.append(StateObservation(case_id, doc.file_id, doc.path, f"text:{line_no}", doc.captured_at, ts, system, rid, matches, state, rec, category))
                     continue
         # Generic line: exact identity + resource ID.
-        matches = _collect_matches({"lookup_key": line}, ids)
         rid_m = RESOURCE_RE.search(line)
+        matches = _document_matches(line, ids)
+        if rid_m:
+            matches.extend(_collect_matches({"resource_id": rid_m.group(1)}, ids))
+        # Keep matching deterministic when a line contains both a direct
+        # identifier and a resource link.
+        matches = list({
+            (m["field"], m["value"], m["match_type"]): m for m in matches
+        }.values())
         if matches and rid_m:
             rid = rid_m.group(1)
             system = _system_from_resource(rid, doc.path)
@@ -704,24 +725,9 @@ def reconstruct_case_observations(dataset_dir: str | Path, case: dict[str, str],
     for link in links:
         ids.setdefault("resource_id", set()).add(link["resource_id"])
     observations: list[StateObservation] = []
-    for link in links:
-        rid = link["resource_id"]
-        system = _system(link.get("target_system", ""))
-        if system == "unknown":
-            system = _system_from_resource(rid, "")
-        category = _category(system, "", {"resource_id": rid, "event_type": link.get("event_type", ""), "details": link.get("details", "")})
-        try:
-            matched = json.loads(link.get("matched", "[]"))
-        except json.JSONDecodeError:
-            matched = []
-        observations.append(StateObservation(
-            case_id=case["case_id"], evidence_id=link.get("activity_id", ""),
-            evidence_path=str(dataset / "system_activity.csv"), json_path="activity:LINK_RESOURCE_IDENTITY",
-            captured_at=link.get("event_time", ""), observed_at=link.get("event_time", ""),
-            system_id=system, resource_id=rid, matched_identifiers=matched,
-            observed_state="PRESENT", record={"resource_id": rid, "event_type": link.get("event_type", ""), "details": link.get("details", "")},
-            data_category=category,
-        ))
+    # A catalog link proves ownership, not that the linked resource is still
+    # present.  Keep it as an identity bridge and only emit a state observation
+    # when a participant-visible evidence document describes the resource.
     for doc in docs:
         captured = _utc(doc.captured_at)
         if captured is None or captured > cutoff or not doc.content:

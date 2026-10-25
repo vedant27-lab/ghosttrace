@@ -1,0 +1,17 @@
+import { useEffect, useState } from "react";
+import { ArrowLeft, FileCode2, FileText, Image, Search } from "lucide-react";
+import { api } from "../lib/api";
+import type { EvidenceDetail, EvidencePage } from "../types";
+import { Card, EmptyState, ErrorState, Loading, PageTitle } from "../components/Primitives";
+
+export function EvidenceExplorer({ selectedId }: { selectedId?: string }) {
+  const [page, setPage] = useState<EvidencePage | null>(null);
+  const [detail, setDetail] = useState<EvidenceDetail | null>(null);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const load = () => api.evidence(new URLSearchParams({ page: "1", page_size: "30", ...(search ? { search } : {}) })).then(setPage).catch((reason: Error) => setError(reason.message));
+  useEffect(() => { const timer = window.setTimeout(load, 220); return () => window.clearTimeout(timer); }, [search]);
+  useEffect(() => { if (selectedId) api.evidenceDetail(selectedId).then(setDetail).catch(() => undefined); }, [selectedId]);
+  return <><PageTitle eyebrow="Traceability" title="Evidence explorer" description="Search the manifest and inspect sanitized excerpts without exposing raw files or arbitrary paths." />{error && <ErrorState message={error} retry={load} />}<div className="evidence-layout"><Card><label className="search-input full"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search evidence IDs, origins, or extracted text" /></label>{!page ? <Loading label="Indexing evidence manifest…" /> : page.items.length === 0 ? <EmptyState title="No evidence matches" detail="Try an identifier, service name, or file type." /> : <div className="evidence-list">{page.items.map(item => <button key={item.evidence_id} className={`evidence-item ${detail?.evidence_id === item.evidence_id ? "selected" : ""}`} onClick={() => api.evidenceDetail(item.evidence_id).then(setDetail)}><div className="file-icon">{item.file_type === "png" ? <Image size={17} /> : item.file_type === "json" || item.file_type === "sql" ? <FileCode2 size={17} /> : <FileText size={17} />}</div><div><p className="mono strong">{item.evidence_id}</p><p>{item.origin}</p><span className="muted-label">{item.file_type.toUpperCase()} · {formatDate(item.captured_at)}</span></div>{item.has_extraction_error && <span className="error-dot" title="Extraction error" />}</button>)}</div>}</Card><Card className="evidence-detail">{!detail ? <EmptyState title="Select an evidence item" detail="Evidence excerpts are sanitized before they are shown here." /> : <><div className="panel-heading"><div><p className="eyebrow">{detail.file_type.toUpperCase()} evidence</p><h2>{detail.evidence_id}</h2></div><span className="muted-label">{detail.origin}</span></div><div className="evidence-meta"><span>Captured {formatDate(detail.captured_at)}</span><span>Parser {detail.extraction_method || "not available"}</span></div>{detail.extraction_error && <div className="warning-panel"><span>{detail.extraction_error}</span></div>}<pre className="evidence-excerpt">{detail.excerpt || "No extractable text is available for this evidence item."}</pre><p className="privacy-note">Sensitive identifiers are masked in the web view. The API does not expose arbitrary local paths or raw uploads.</p></>}</Card></div></>;
+}
+function formatDate(value: string) { if (!value) return "—"; return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)); }

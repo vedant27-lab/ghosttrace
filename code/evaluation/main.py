@@ -50,6 +50,8 @@ def evaluate_public_sample():
     exact_sequences = 0
     field_correct = 0
     field_total = 0
+    step_correct = 0
+    step_total = 0
     total_gold_steps = 0
     total_pred_steps = 0
 
@@ -65,6 +67,9 @@ def evaluate_public_sample():
         for i in range(max(len(expected_steps), len(predicted_steps))):
             es = expected_steps[i] if i < len(expected_steps) else {}
             ps = predicted_steps[i] if i < len(predicted_steps) else {}
+            step_total += 1
+            if i < len(expected_steps) and i < len(predicted_steps) and norm_steps(json.dumps([ps])) == norm_steps(json.dumps([es])):
+                step_correct += 1
             for field in ("phase", "system_id", "resource_id", "operation", "state", "evidence_id"):
                 field_total += 1
                 field_correct += i < len(expected_steps) and i < len(predicted_steps) and es.get(field) == ps.get(field)
@@ -75,6 +80,7 @@ def evaluate_public_sample():
         "status_accuracy": status_correct / n if n else 0,
         "exact_row_accuracy": exact_rows / n if n else 0,
         "exact_sequence_accuracy": exact_sequences / n if n else 0,
+        "step_accuracy": step_correct / step_total if step_total else 0,
         "step_field_accuracy": field_correct / field_total if field_total else 0,
         "gold_steps": total_gold_steps,
         "predicted_steps": total_pred_steps,
@@ -161,11 +167,12 @@ def main():
         print(f"{key}: {value:.4f}" if isinstance(value, float) else f"{key}: {value}")
     print("\n=== Custom regression tests ===")
     failed = 0
-    for name, actual, expected in custom_tests():
+    tests = custom_tests()
+    for name, actual, expected in tests:
         passed = actual == expected
         failed += not passed
         print(f"{'PASS' if passed else 'FAIL'}: {name} (actual={actual!r}, expected={expected!r})")
-    print(f"\nCustom tests: {len(custom_tests()) - failed}/{len(custom_tests())} passed")
+    print(f"\nCustom tests: {len(tests) - failed}/{len(tests)} passed")
     return 1 if failed else 0
 
 

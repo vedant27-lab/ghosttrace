@@ -1,0 +1,54 @@
+## [2026-10-25T19:24:57.1123694Z] SESSION START
+
+tool=Codex
+model=gpt-5
+Repo Root: A:\Software Projects\ghosttrace
+Branch: master
+Worktree: main
+Parent Agent: none
+Language: py
+Time Remaining: not configured
+
+## [2026-10-25T19:32:17.5191619Z] Improve GhostTrace for portfolio reliability
+
+User Prompt (verbatim, secrets redacted):
+Mission: Turn GhostTrace into a Resume-Worthy Engineering Project. Inspect the repository and existing implementation, reproduce the baseline, improve correctness and reliability without hardcoding answers or modifying the participant dataset, add meaningful automated tests, improve setup and documentation, run the public evaluator and full 518-request pipeline, validate reproducibility, and report the engineering results.
+
+Agent Response Summary:
+Reproduced the public baseline before changes, then fixed support-attachment classification, catalog-link state semantics, text identifier matching, and working-directory-dependent CLI paths. Added pytest coverage, dependency/setup files, architecture and resume documentation, and refreshed evaluation and usage reports with measured final results. Generated and validated the full output.csv and confirmed that a repeated run produced byte-identical output.
+
+Actions:
+* Ran baseline and final public-sample evaluation.
+* Edited code/main.py, code/state_reconstructor.py, code/output_validator.py, and code/evaluation/main.py.
+* Added tests/test_engine.py, requirements.txt, pytest.ini, .gitignore, docs/architecture.md, docs/resume_project.md, and refreshed README.md and evaluation reports.
+* Ran pytest, compileall, the 518-request generator, output validator, and a repeated-run SHA-256 check.
+
+Context:
+tool=Codex
+model=gpt-5
+branch=master
+repo_root=A:\Software Projects\ghosttrace
+worktree=main
+parent_agent=none
+
+## [2026-10-25T19:43:46.4442184Z] Build GhostTrace full-stack web application
+
+User Prompt (verbatim, secrets redacted):
+Project Mission: Turn GhostTrace into a Full-Stack Web Application. Inspect the existing repository, preserve the audit engine, implement a polished FastAPI and React/Vite/Tailwind application with dashboard, case explorer, evidence explorer, audit jobs, methodology, tests, deployment documentation, privacy controls, and accurate final verification without fabricating deployment results.
+
+Agent Response Summary:
+Inspected the existing dataset-backed engine and found no frontend or API. Added a typed FastAPI backend with sanitized case/evidence responses, explicit CORS, request limits, rate limiting, safe paths, single-flight cancellable jobs, and synthetic demo fallback. Added a React/TypeScript/Vite/Tailwind interface with dashboard charts, filters, case and evidence explorers, audit progress/download, methodology, frontend tests, API/deployment docs, and production configuration templates. Preserved and revalidated the original 518-row engine output and validator contract.
+
+Actions:
+* Read the API-engineer skill and inspected repository files, dependencies, tests, dataset, and Git status.
+* Added backend/main.py, backend/models.py, backend/services.py, backend/demo_data.py, backend tests, and FastAPI documentation.
+* Added the frontend Vite/Tailwind application, typed API client, pages, components, Vitest test, package lock, and environment template.
+* Ran Python tests, API smoke tests, the original engine, output validator, public evaluator, frontend tests, TypeScript typecheck, and production build.
+
+Context:
+tool=Codex
+model=gpt-5
+branch=master
+repo_root=A:\Software Projects\ghosttrace
+worktree=main
+parent_agent=none

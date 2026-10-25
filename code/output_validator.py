@@ -10,6 +10,7 @@ from typing import Any
 
 
 OUTPUT_COLUMNS = ["case_id", "deletion_status", "steps_json"]
+ROOT = Path(__file__).resolve().parent.parent
 
 STEP_FIELDS = {
     "step_no",
@@ -587,27 +588,27 @@ def main() -> int:
     )
     parser.add_argument(
         "--output",
-        default="output.csv",
-        help="Output CSV to validate (default: output.csv).",
+        default=str(ROOT / "output.csv"),
+        help="Output CSV to validate (default: repository output.csv).",
     )
     parser.add_argument(
         "--requests",
-        default="dataset/deletion_requests.csv",
+        default=str(ROOT / "dataset" / "deletion_requests.csv"),
         help="Request CSV corresponding to the output.",
     )
     parser.add_argument(
         "--manifest",
-        default="dataset/evidence_files.csv",
+        default=str(ROOT / "dataset" / "evidence_files.csv"),
         help="Evidence manifest CSV.",
     )
     parser.add_argument(
         "--audit-log",
-        default="dataset/user_audit_log.csv",
+        default=str(ROOT / "dataset" / "user_audit_log.csv"),
         help="Historical identity audit CSV.",
     )
     parser.add_argument(
         "--activity-log",
-        default="dataset/system_activity.csv",
+        default=str(ROOT / "dataset" / "system_activity.csv"),
         help="System activity CSV.",
     )
     args = parser.parse_args()

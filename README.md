@@ -1,157 +1,125 @@
-# HackerRank Orchestrate - October 2026
+# GhostTrace — Privacy Deletion Audit & Evidence Explorer
 
-## Ghost Data Still Exists
+GhostTrace is a full-stack portfolio application for auditing whether personal data was actually deleted. A React/Vite interface explores the results of a deterministic Python evidence engine, while a FastAPI backend exposes sanitized case, evidence, summary, and audit-job APIs.
 
-Build an AI agent that audits whether a user's personal data was actually deleted.
+> GhostTrace provides evidence-based audit assistance. It is not legal advice, a compliance certification, or proof that missing evidence means deletion occurred.
 
-A deletion workflow may report **Complete** while data still exists in databases, logs, support attachments, exports, search indexes, archives, or backups. Sync and restore processes may also bring deleted data back.
+## Product tour
 
-For each request, the agent must first determine whether deletion was actually requested. It then returns `COMPLETE`, `INCOMPLETE`, or `NOT_APPLICABLE`, reports any remaining data or recreation risk, and produces the ordered remediation and verification steps required to finish an authorized deletion safely.
+- **Dashboard:** live summary cards, status distribution, search, filtering, and pagination across audit cases.
+- **Case Explorer:** identity history, audit cutoff, observed resources, evidence references, findings, remediation, and verification steps.
+- **Evidence Explorer:** manifest search and sanitized excerpts with provenance and parser status.
+- **Run Audit:** single-flight background execution with progress, cancellation, safe output replacement, and CSV download.
+- **Methodology:** architecture, policy interpretation, privacy boundaries, and deployment limitations.
 
-Read [`problem_statement.md`](./problem_statement.md) for the complete challenge contract.
+The app clearly labels synthetic demo mode. When the participant-facing dataset is present locally, the backend reads it through the existing engine; it never duplicates deletion logic in TypeScript.
 
----
+## Architecture
 
-## Quick Start
-
-Clone the repository and move into the project directory:
-
-```bash
-git clone https://github.com/interviewstreet/hackerrank-orchestrate-october26.git
-cd hackerrank-orchestrate-october26
+```mermaid
+flowchart LR
+    UI[React + TypeScript + Vite] --> API[FastAPI JSON API]
+    API --> REPO[Read-only repository index]
+    REPO --> ENGINE[Existing deterministic audit engine]
+    ENGINE --> EVIDENCE[JSON / SQL / logs / PDF / OCR evidence]
+    ENGINE --> CSV[output.csv contract]
+    API --> JOBS[Single-flight audit job manager]
+    API --> SAFE[Sanitized excerpts + allowlisted references]
 ```
 
-Start your AI coding tool from the **repository root** so it automatically reads [`AGENTS.md`](./AGENTS.md) and logs your session turns to `log.txt` in the root directory.
+Backend responsibilities remain in `code/` and `backend/`. Frontend responsibilities remain in `frontend/`. Detailed decisions are documented in [`docs/architecture.md`](docs/architecture.md), API behavior in [`docs/api.md`](docs/api.md), and deployment preparation in [`docs/deployment.md`](docs/deployment.md).
 
-Build your solution in `code/main.py`, or use another language and document its setup and run command clearly in your README.
+## Stack
 
-Your solution must:
+**Backend:** Python 3.11+, FastAPI, Uvicorn, Pydantic, SQLite-compatible parsing, pypdf, Pillow, pytesseract, pytest.
 
-- Read the input files from `dataset/`
-- Generate one prediction row for every request in `dataset/deletion_requests.csv`
-- Write the final predictions to `output.csv` in the repository root
+**Frontend:** React, TypeScript, Vite, Tailwind CSS, Recharts, Lucide icons, typed fetch client.
 
-Run the starter Python entry point with:
+No external AI provider or paid API is required.
 
-```bash
-python3 code/main.py
-```
+## Run locally on Windows
 
-The blank template at `dataset/output.csv` is provided as a reference. Your final generated file for submission must be the root-level `output.csv`.
-
-
-## Dataset
-
-All participant-facing files are in `dataset/`:
-
-| File | Contents |
-| --- | --- |
-| `deletion_requests.csv` | 518 requests |
-| `sample_deletion_requests.csv` | 32 sample requests |
-| `sample_output.csv` | Correct sample answers |
-| `user_identities.csv` | Current user identities |
-| `user_audit_log.csv` | Historical identity changes |
-| `system_activity.csv` | Activity across services and data processes |
-| `deletion_rules.csv` | Required treatment for each data category |
-| `evidence_files.csv` | Manifest of supplied evidence files |
-| `output.csv` | Blank output template |
-
-Evidence is stored under `dataset/evidence/` and may include PDFs, images, logs, JSON, plain text, or SQL snapshot exports. SQL captures may contain a primary database, regional replicas, a reporting replica, or a failover replica so replication drift can be investigated directly. The `.sql` files are readable as text and executable with SQLite.
-
-Only `deletion_requests.csv` requires answers. The other files provide evidence and context.
-
----
-
-## Output
-
-Create `output.csv` with these columns in this exact order:
-
-```text
-case_id,deletion_status,steps_json
-```
-
-Produce exactly one row per request. `deletion_status` is `COMPLETE`, `INCOMPLETE`, or `NOT_APPLICABLE`. `steps_json` is an ordered JSON array containing findings, remediation actions, and verification checks. Use an empty array (`[]`) for `NOT_APPLICABLE`. Evidence references may be a `file_id`, `activity_id`, or `audit_id`. Determine the resource state at `audit_at` from the available evidence; reported workflow statuses and operation results are claims. Use `dataset/sample_output.csv` as the format reference.
-
-The final file must contain 518 data rows sorted by `case_id` (plus the header row). The grader parses `steps_json` as JSON, so object-key order and whitespace do not matter; array order does. Order findings, remediation, and verification in that phase order. Within a phase, follow the operation order in the problem statement, then sort by `system_id` and `resource_id`.
-
----
-
-## Evaluation
-
-`output.csv` will be compared with hidden canonical answers. Scoring considers:
-
-- deletion assessment accuracy;
-- current and historical identity resolution;
-- discovery of remaining data and recreation risks;
-- correct policy application and evidence references; and
-- completeness and ordering of remediation and verification steps.
-
-Your `code.zip` must include:
-
-```text
-code/evaluation/evaluation_report.md
-code/evaluation/usage_report.md
-```
-
-- `evaluation_report.md` must cover case, row, field, and sequence accuracy, at least three additional evaluation cases created by you, failures found, and improvements made.
-- `usage_report.md` must cover the final full-dataset run, including model providers and names, model calls, input and output tokens, total and average tokens per request, and estimated total and per-request cost. Include per-model and overall totals when using multiple models.
-
-**Important:** Place `evaluation_report.md` and `usage_report.md` inside `code/evaluation/` (matching `code/evaluation/main.py` in this starter layout), write your complete evaluation metrics, custom evaluation test cases, and token/cost breakdowns directly inside those Markdown files, and keep prompts in source code or Markdown files. Automated code evaluation ignores raw data files (`.csv`, `.tsv`, `.json`, `.jsonl`, `.sql`, `.log`), so content stored only in those formats will not be visible to the code judge or AI interviewer.
-
----
-
-## Chat Transcript
-
-This repository includes [`AGENTS.md`](./AGENTS.md), which instructs compatible AI coding tools to append conversation summaries to `log.txt` in the repository root:
-
-| Platform | Path |
-| --- | --- |
-| macOS / Linux | `<repo root>/log.txt` |
-| Windows | `<repo root>\log.txt` |
-
-- Always launch your AI coding agent from the repository root (or explicitly ask it to read `./AGENTS.md` first) so every turn is logged to `log.txt` with the required `User Prompt`, `Agent Response Summary`, `Actions`, and `Context` sections.
-- Upload `log.txt` directly as your `chat_transcript` submission on HackerRank.
-- Do not include API keys, tokens, credentials, or secrets in prompts, code, configuration, or `log.txt`.
-
----
-
-## Packaging `code.zip` and Submission
-
-| Item | Description |
-| --- | --- |
-| `code.zip` | Runnable solution, prompts, configuration, `README.md`, and `evaluation/` reports |
-| `output.csv` | One answer row for each of the 518 requests in `dataset/deletion_requests.csv` |
-| `chat_transcript` | The root `log.txt` file generated by your coding agent |
-| AI interview | Live explanation of your architecture, approach, and evaluation |
-
-You may use any programming language, model, framework, or retrieval approach. Include clear setup and execution instructions in `README.md` inside `code.zip`.
-
-To package `code.zip` from the repository root without bundling the dataset:
-
-**macOS / Linux:**
-
-```bash
-zip -r code.zip README.md code -x "*/__pycache__/*" "*/.venv/*" "*/venv/*" "*/node_modules/*" "*/.git/*" "*/.DS_Store"
-```
-
-**Windows (PowerShell):**
+From the repository root:
 
 ```powershell
-Compress-Archive -Path README.md, code -DestinationPath code.zip -Force
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-When packaging `code.zip`:
+For complete screenshot evidence extraction, install Tesseract OCR and ensure `tesseract.exe` is on `PATH`. The backend records OCR failures and continues when it is unavailable.
 
-- Keep your evaluation reports in `code/evaluation/` so they are bundled automatically with `code` (or add `evaluation` to the archive command above if you placed them in a top-level `evaluation/` directory).
-- Do **not** include `dataset/`, virtual environments (`.venv`, `venv`, `node_modules`), or build caches (`__pycache__`). On Windows, keep `.venv` at the repository root (outside `code/`) and remove any `code/__pycache__` folders before running `Compress-Archive`.
-- Do **not** include nested archives (`.zip`, `.tar`, `.gz`, `.tgz`, `.7z`, `.rar`) inside `code.zip` — submissions containing nested archive files will be rejected.
+Start the API:
 
-Before submitting, confirm that:
+```powershell
+python -m uvicorn backend.main:app --reload --port 8000
+```
 
-- `output.csv` has the exact header `case_id,deletion_status,steps_json` and contains all 518 data rows sorted by `case_id`;
-- every `steps_json` value is a valid JSON array with consecutive step numbers starting at `1`;
-- findings cite valid evidence IDs, and `COMPLETE` verification steps cite evidence proving the current state;
-- proposed remediation and future verification steps use an empty `evidence_id` (`""`);
-- `code.zip` includes your runnable code, `README.md`, `code/evaluation/evaluation_report.md`, and `code/evaluation/usage_report.md`;
-- `log.txt` follows the `AGENTS.md` turn format and is uploaded to the `chat_transcript` slot; and
-- no API keys, credentials, real personal data, or sensitive configuration values are included.
+In a second terminal:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. The frontend defaults to `http://localhost:8000`; override it with `frontend/.env.local`:
+
+```text
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+If the dataset is absent, the API starts in synthetic demo mode. Demo fixtures are labeled and must not be presented as evaluation results.
+
+## Engine and validation commands
+
+```powershell
+# Generate the required CSV
+python code/main.py
+
+# Validate schema, JSON, evidence references, cutoffs, and ordering
+python code/output_validator.py
+
+# Run backend and engine regression tests
+python -m pytest -q
+
+# Run public-sample evaluation when sample files are available
+python code/evaluation/main.py
+```
+
+The existing engine’s reproducible full run produces 518 rows when the supplied dataset is present. Its measured public-sample results and limitations are recorded in [`code/evaluation/evaluation_report.md`](code/evaluation/evaluation_report.md). The web layer does not change the meanings of `COMPLETE`, `INCOMPLETE`, or `NOT_APPLICABLE`.
+
+## Frontend build and deployment
+
+```powershell
+Set-Location frontend
+npm run typecheck
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+The intended beginner-friendly deployment is Vercel/Netlify for `frontend/` and Render for the FastAPI service. See [`docs/deployment.md`](docs/deployment.md) for exact commands, environment variables, CORS, health checks, and the current ephemeral-storage limitation. No live deployment has been performed from this repository, so no hosted URL is claimed.
+
+## Security and privacy
+
+- The frontend receives masked identifiers and sanitized excerpts rather than raw evidence by default.
+- Evidence IDs are resolved only through the manifest or known system-activity references.
+- The API does not expose directory listings, arbitrary file paths, uploaded executable content, or SQL execution endpoints.
+- CORS origins are explicit and request body/rate limits are applied at the API boundary.
+- The current audit job manager is in-memory and local-output based; persistent storage and a durable queue are required for a multi-instance production deployment.
+- Use synthetic data for public screenshots and demos. Do not deploy the challenge dataset without permission.
+
+## Screenshots
+
+Screenshots are intentionally not fabricated. Capture sanitized screenshots after starting the local app and add them here:
+
+```text
+docs/screenshots/dashboard.png
+docs/screenshots/case-explorer.png
+docs/screenshots/evidence-explorer.png
+```
+
+## Portfolio materials
+
+See [`docs/resume_project.md`](docs/resume_project.md) for the concise description, technically accurate resume bullets, verified capabilities, and interview-ready architecture explanation.
